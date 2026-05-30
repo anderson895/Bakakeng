@@ -140,3 +140,7 @@ bakakeng/
 ---
 
 *Brgy. Bakakeng · Baguio City, Benguet · Cordillera Administrative Region*
+
+# Account
+``Email: admin@bakakeng.com ``
+``password: admin@bakakeng.com``
