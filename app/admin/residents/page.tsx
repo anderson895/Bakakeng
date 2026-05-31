@@ -1,17 +1,27 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Users, Loader2, MapPin, Phone, Mail } from 'lucide-react';
+import { Search, Users, Loader2, MapPin, Phone, Mail, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog';
 import { Resident } from '@/types';
 import { formatDate } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+
+type ResidentWithCount = Resident & { request_count: number };
 
 export default function ResidentsPage() {
-  const [residents, setResidents] = useState<(Resident & { request_count: number })[]>([]);
+  const [residents, setResidents] = useState<ResidentWithCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [target, setTarget] = useState<ResidentWithCount | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const { toast } = useToast();
 
   const fetchResidents = useCallback(async () => {
     setLoading(true);
@@ -43,6 +53,23 @@ export default function ResidentsPage() {
     const timer = setTimeout(fetchResidents, 300);
     return () => clearTimeout(timer);
   }, [fetchResidents]);
+
+  const handleDelete = async () => {
+    if (!target) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/residents/${target.id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      toast({ title: 'Resident deleted', description: `${target.first_name} ${target.last_name} has been removed.` });
+      setTarget(null);
+      fetchResidents();
+    } catch (err: unknown) {
+      toast({ variant: 'destructive', title: 'Delete failed', description: err instanceof Error ? err.message : 'Try again' });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
@@ -79,9 +106,17 @@ export default function ResidentsPage() {
                   style={{ background: 'var(--navy)' }}>
                   {resident.first_name[0]}{resident.last_name[0]}
                 </div>
-                <Badge variant="outline" className="text-xs">
-                  {resident.request_count} request{resident.request_count !== 1 ? 's' : ''}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {resident.request_count} request{resident.request_count !== 1 ? 's' : ''}
+                  </Badge>
+                  <button
+                    onClick={() => setTarget(resident)}
+                    title="Delete resident"
+                    className="text-slate-300 hover:text-red-600 transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
               <h3 className="font-semibold text-slate-800 mb-1">
                 {resident.first_name} {resident.middle_name ? `${resident.middle_name[0]}. ` : ''}{resident.last_name}
@@ -109,6 +144,31 @@ export default function ResidentsPage() {
           ))}
         </div>
       )}
+
+      {/* Delete confirmation */}
+      <Dialog open={!!target} onOpenChange={(open) => !deleting && !open && setTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-700 flex items-center gap-2">
+              <Trash2 className="w-5 h-5" /> Delete Resident
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete <strong>{target?.first_name} {target?.last_name}</strong>
+              {target && target.request_count > 0 && (
+                <> along with their <strong>{target.request_count} document request{target.request_count !== 1 ? 's' : ''}</strong> and all uploaded files</>
+              )}. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTarget(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete Permanently'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

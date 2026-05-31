@@ -27,7 +27,7 @@ const schema = z.object({
   address: z.string().min(5, 'Complete address is required'),
   purok: z.string().optional(),
   contact_number: z.string().min(7, 'Valid contact number required'),
-  email: z.string().email('Invalid email').optional().or(z.literal('')),
+  email: z.string().min(1, 'Email is required').email('Invalid email'),
   document_type: z.string().min(1, 'Please select document type'),
   purpose: z.string().min(10, 'Please state the purpose (min 10 characters)'),
 });
@@ -237,8 +237,9 @@ export default function HomePage() {
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Email (Optional)</Label>
+                      <Label>Email *</Label>
                       <Input type="email" {...register('email')} placeholder="juan@email.com" />
+                      {errors.email && <p className="text-xs text-red-500">{errors.email.message}</p>}
                     </div>
                   </div>
                 </div>

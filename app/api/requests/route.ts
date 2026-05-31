@@ -97,31 +97,36 @@ export async function POST(request: NextRequest) {
       document_type, purpose,
     } = body;
 
-    // Insert resident
-    const { data: resident, error: residentError } = await supabase
-      .from('residents')
-      .insert({
-        first_name: first_name.trim(),
-        last_name: last_name.trim(),
-        middle_name: middle_name?.trim() || null,
-        date_of_birth: date_of_birth || null,
-        address: address.trim(),
-        purok: purok?.trim() || null,
-        contact_number: contact_number.trim(),
-        email: email?.trim() || null,
-      })
-      .select()
-      .single();
+    // Email is the resident identity key — required so submissions can be deduped.
+    if (!email || !String(email).trim()) {
+      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+    }
 
-    if (residentError) {
-      return NextResponse.json({ error: residentError.message }, { status: 500 });
+    // Reuse an existing resident (matched on email) instead of
+    // creating a duplicate every time the same person submits a request.
+    const { data: residentId, error: residentError } = await supabase.rpc('get_or_create_resident', {
+      p_first_name: first_name,
+      p_last_name: last_name,
+      p_middle_name: middle_name ?? null,
+      p_date_of_birth: date_of_birth || null,
+      p_address: address,
+      p_purok: purok ?? null,
+      p_contact_number: contact_number,
+      p_email: email ?? null,
+    });
+
+    if (residentError || !residentId) {
+      return NextResponse.json(
+        { error: residentError?.message || 'Failed to resolve resident' },
+        { status: 500 }
+      );
     }
 
     // Create document request
     const { data: docRequest, error: reqError } = await supabase
       .from('document_requests')
       .insert({
-        resident_id: resident.id,
+        resident_id: residentId,
         document_type,
         purpose: purpose.trim(),
         status: 'pending',

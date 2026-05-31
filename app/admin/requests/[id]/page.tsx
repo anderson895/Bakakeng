@@ -4,11 +4,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, CheckCircle, XCircle, Clock, Loader2,
-  Upload, FileText, Download, AlertCircle, ChevronDown
+  Upload, FileText, Download, AlertCircle, ChevronDown, Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog';
 import { DocumentRequest, DOCUMENT_TYPE_LABELS, STATUS_CONFIG, RequestStatus } from '@/types';
 import { formatDateTime, formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -35,6 +38,8 @@ export default function RequestDetailPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const fetchRequest = useCallback(async () => {
     try {
@@ -90,6 +95,20 @@ export default function RequestDetailPage() {
       toast({ variant: 'destructive', title: 'Failed to save notes' });
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const deleteRequest = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/requests/${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      toast({ title: 'Request deleted', description: `${request?.control_number} has been removed.` });
+      router.push('/admin/requests');
+    } catch (err: unknown) {
+      toast({ variant: 'destructive', title: 'Delete failed', description: err instanceof Error ? err.message : 'Try again' });
+      setDeleting(false);
     }
   };
 
@@ -165,33 +184,44 @@ export default function RequestDetailPage() {
           </div>
         </div>
 
-        {/* Action dropdown */}
-        {transitions.length > 0 && (
-          <div className="relative">
-            <Button onClick={() => setShowActions(!showActions)} disabled={updating}>
-              {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Status'}
-              <ChevronDown className="w-4 h-4 ml-1" />
-            </Button>
-            {showActions && (
-              <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-lg z-20 overflow-hidden">
-                {transitions.map(({ label, next, color }) => (
-                  <button key={next}
-                    onClick={() => {
-                      if (next === 'rejected') {
-                        setShowRejectForm(true);
-                        setShowActions(false);
-                      } else {
-                        updateStatus(next);
-                      }
-                    }}
-                    className={`w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-slate-50 transition-colors ${color}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          {transitions.length > 0 && (
+            <div className="relative">
+              <Button onClick={() => setShowActions(!showActions)} disabled={updating}>
+                {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Status'}
+                <ChevronDown className="w-4 h-4 ml-1" />
+              </Button>
+              {showActions && (
+                <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-lg z-20 overflow-hidden">
+                  {transitions.map(({ label, next, color }) => (
+                    <button key={next}
+                      onClick={() => {
+                        if (next === 'rejected') {
+                          setShowRejectForm(true);
+                          setShowActions(false);
+                        } else {
+                          updateStatus(next);
+                        }
+                      }}
+                      className={`w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-slate-50 transition-colors ${color}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setShowDeleteDialog(true)}
+            disabled={deleting}
+            title="Delete request"
+            className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700">
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Reject form */}
@@ -215,6 +245,29 @@ export default function RequestDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Delete confirmation */}
+      <Dialog open={showDeleteDialog} onOpenChange={(open) => !deleting && setShowDeleteDialog(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-700 flex items-center gap-2">
+              <Trash2 className="w-5 h-5" /> Delete Request
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete request <strong>{request.control_number}</strong> and all of its
+              uploaded documents. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={deleteRequest} disabled={deleting}>
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete Permanently'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid md:grid-cols-3 gap-6">
         {/* Left - Resident & Document Info */}
